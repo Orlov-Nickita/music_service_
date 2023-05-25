@@ -6,12 +6,12 @@ from flask import Response, request, jsonify, send_file
 from pydub import AudioSegment
 from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import FileStorage
-
+import soundfile
 from models import Record, db, Users
 from . import routes
 
 
-def convert_wav_to_mp3(file: FileStorage) -> str:
+def convert_wav_to_mp3(file: FileStorage) -> str | bool:
     """
     Конвертер аудиозаписи из формата WAV в формат MP3. Файл сохраняется, конвертируется в новый формат, затем
     первоначальный файл удаляется
@@ -33,6 +33,11 @@ def convert_wav_to_mp3(file: FileStorage) -> str:
         mp3_path: str = f'{mp3_filename}{mp3_file_extension}'
 
     file.save(dst=wav_path)
+
+    with open(wav_path, 'rb') as f:
+        if f.read(4) != b'RIFF':
+            return False
+
     sound: AudioSegment = AudioSegment.from_wav(wav_path)
     os.remove(wav_path)
 
@@ -67,6 +72,11 @@ def record_request() -> tuple[Response, Response.status_code]:
         user_token: str = a.get('user_token', 'пусто')
         wav_file: FileStorage = request.files.get('audio', 'пусто')
 
+        mp3 = convert_wav_to_mp3(wav_file)
+
+        if not os.path.splitext(wav_file.filename)[1].lower() == '.wav' or not mp3:
+            return jsonify(error='Need file in format .wav'), 404
+
         try:
             u: Users = Users.query.filter(Users.id == user_id, Users.token == user_token).all()
             if not u:
@@ -80,7 +90,8 @@ def record_request() -> tuple[Response, Response.status_code]:
 
         rec_uuid: uuid.UUID = uuid.uuid4()
         url_link_for_mp3: str = f'{request.base_url}?id={rec_uuid}&user={user_id}'
-        r: Record = Record(uuid=rec_uuid, mp3=convert_wav_to_mp3(wav_file), link=url_link_for_mp3, user_id=user_id)
+
+        r: Record = Record(uuid=rec_uuid, mp3=mp3, link=url_link_for_mp3, user_id=user_id)
 
         db.session.add(r)
         db.session.commit()
