@@ -1,0 +1,42 @@
+version: '3'
+
+services:
+  web:
+    container_name: 'mp3_converter-flask-app'
+    build: .
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      DEBUG: ${DEBUG}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+
+  db:
+    image: postgres
+    container_name: 'mp3_converter-postgresql'
+    restart: always
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_HOST: ${DB_HOST}
+    volumes:
+      - ./generate_bd.sql:/docker-entrypoint-initdb.d/create_tables.sql
+      - ./db_settings.sh:/docker-entrypoint-initdb.d/init-user-db.sh
+      - db_data:/var/lib/postgresql/wav_mp3_converter
+
+volumes:
+  db_data:
+    driver: local
+    driver_opts:
+      device: /var/lib/postgresql/wav_mp3_converter
+      type: none
+      o: bind
